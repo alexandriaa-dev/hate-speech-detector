@@ -196,11 +196,6 @@ const CheckModelStatus = ({ onStatusChange }) => {
 
       {showCard && modelStatus && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-4">
-            {getStatusIcon(modelStatus.status)}
-            <h3 className="text-lg font-bold text-neutral-text">Status Model</h3>
-          </div>
-
           <div className={`p-4 rounded-xl border ${getStatusColor(modelStatus.status)}`}>
             <div className="flex items-start gap-2">
               {getStatusIcon(modelStatus.status)}
