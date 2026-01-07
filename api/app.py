@@ -8,24 +8,17 @@ import io
 from contextlib import redirect_stdout, redirect_stderr
 
 app = Flask(__name__)
-# Enable CORS for React frontend
-# Fix CORS configuration - remove trailing slash and add proper headers
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "https://nb-hate-speech-detector.vercel.app",  # Remove trailing slash
-            "*"  # Allow all origins as fallback
-        ],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": False
-    }
-})
 
-# Also enable CORS for root route
-CORS(app, resources={r"/*": {"origins": "*"}})
+# Enable CORS for all routes - simple and reliable approach
+CORS(app, origins="*", methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
+
+# Add CORS headers manually as backup
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response
 
 @app.route('/', methods=['GET'])
 def index():
@@ -249,6 +242,107 @@ def get_model_info():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/model-status', methods=['GET'])
+def get_model_status():
+    """Check model status from pickle file"""
+    try:
+        project_root = Path(__file__).parent.parent
+        
+        # Check if pickle file exists
+        pickle_path = project_root / "model" / "model.pkl"
+        json_path = project_root / "public" / "model.json"
+        
+        pickle_exists = pickle_path.exists()
+        json_exists = json_path.exists()
+        
+        if not pickle_exists and not json_exists:
+            return jsonify({
+                'success': True,
+                'status': 'not_available',
+                'message': 'Model belum ada. Silakan train model terlebih dahulu.',
+                'data': None
+            })
+        
+        # If pickle exists, try to load metadata from JSON
+        model_info = None
+        if json_exists:
+            try:
+                import json
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    model_data = json.load(f)
+                
+                # Extract metadata
+                model_info = {
+                    'training_accuracy': model_data.get('training_accuracy'),
+                    'testing_accuracy': model_data.get('testing_accuracy'),
+                    'training_metrics': model_data.get('training_metrics'),
+                    'testing_metrics': model_data.get('testing_metrics'),
+                    'cv_metrics': model_data.get('cv_metrics'),
+                    'total_data': model_data.get('total_data'),
+                    'train_size': model_data.get('train_size'),
+                    'test_size': model_data.get('test_size'),
+                    'alpha': model_data.get('alpha'),
+                    'max_features': model_data.get('max_features'),
+                    'vocab_size': len(model_data.get('vocab', [])) if 'vocab' in model_data else 0,
+                }
+            except Exception as e:
+                print(f"Warning: Could not load model.json metadata: {e}")
+        
+        # If pickle exists, verify it can be loaded
+        pickle_valid = False
+        if pickle_exists:
+            try:
+                import pickle
+                with open(pickle_path, 'rb') as f:
+                    pickle_data = pickle.load(f)
+                    # Check if it has required keys
+                    if isinstance(pickle_data, dict) and 'model' in pickle_data and 'vectorizer' in pickle_data:
+                        pickle_valid = True
+            except Exception as e:
+                print(f"Warning: Could not load model.pkl: {e}")
+        
+        # Determine status
+        if pickle_exists and pickle_valid:
+            status = 'ready'
+            message = 'Model sudah di-fit dan siap digunakan.'
+        elif pickle_exists and not pickle_valid:
+            status = 'invalid'
+            message = 'Model file ada tapi tidak valid. Silakan train ulang model.'
+        elif json_exists and not pickle_exists:
+            status = 'partial'
+            message = 'Model JSON ada tapi pickle file tidak ada. Model mungkin tidak lengkap.'
+        else:
+            status = 'not_available'
+            message = 'Model belum ada. Silakan train model terlebih dahulu.'
+        
+        return jsonify({
+            'success': True,
+            'status': status,
+            'message': message,
+            'data': model_info,
+            'pickle_exists': pickle_exists,
+            'pickle_valid': pickle_valid,
+            'json_exists': json_exists
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'status': 'error',
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'OK',
+        'message': 'API is running',
+        'cors_enabled': True
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
