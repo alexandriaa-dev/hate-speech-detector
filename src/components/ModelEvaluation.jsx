@@ -17,17 +17,28 @@ const ModelEvaluation = () => {
       let data;
       
       if (API_URL) {
-        // Fetch from API
-        response = await fetch(`${API_URL}/api/model-info`);
-        if (response.ok) {
-          const apiData = await response.json();
-          if (apiData.success && apiData.data) {
-            data = apiData.data; // API returns {success: true, data: {...}}
+        try {
+          // Fetch from API
+          response = await fetch(`${API_URL}/api/model-info`);
+          if (response.ok) {
+            const apiData = await response.json();
+            if (apiData.success && apiData.data) {
+              data = apiData.data; // API returns {success: true, data: {...}}
+            } else {
+              throw new Error('API returned invalid data');
+            }
           } else {
-            throw new Error('API returned invalid data');
+            throw new Error('API not available');
           }
-        } else {
-          throw new Error('API not available');
+        } catch (error) {
+          // If API fails, fallback to local file
+          console.warn('API not available, using local file:', error);
+          response = await fetch('/model.json');
+          if (response.ok) {
+            data = await response.json();
+          } else {
+            throw new Error('Model file not found');
+          }
         }
       } else {
         // Fallback to local file

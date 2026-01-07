@@ -4,7 +4,11 @@ const CheckModelStatus = ({ onStatusChange }) => {
   const [isChecking, setIsChecking] = useState(false);
   const [modelStatus, setModelStatus] = useState(null);
   const [showCard, setShowCard] = useState(false);
-  const [lastChecked, setLastChecked] = useState(null);
+  const [lastChecked, setLastChecked] = useState(() => {
+    // Load from localStorage on mount
+    const saved = localStorage.getItem('modelStatusLastChecked');
+    return saved ? new Date(saved) : null;
+  });
 
   const checkStatus = async () => {
     setIsChecking(true);
@@ -14,14 +18,21 @@ const CheckModelStatus = ({ onStatusChange }) => {
       const API_URL = import.meta.env.VITE_API_URL || '';
       let response;
       
+      let data;
+      
       if (API_URL) {
-        response = await fetch(`${API_URL}/api/model-status`);
-      } else {
-        // Fallback: check local files
-        const jsonExists = await fetch('/model.json').then(r => r.ok).catch(() => false);
-        response = {
-          ok: true,
-          json: async () => ({
+        try {
+          response = await fetch(`${API_URL}/api/model-status`);
+          if (response.ok) {
+            data = await response.json();
+          } else {
+            throw new Error('API not available');
+          }
+        } catch (error) {
+          // If API fails, fallback to local file check
+          console.warn('API not available, checking local files:', error);
+          const jsonExists = await fetch('/model.json').then(r => r.ok).catch(() => false);
+          data = {
             success: true,
             status: jsonExists ? 'ready' : 'not_available',
             message: jsonExists ? 'Model sudah di-fit dan siap digunakan.' : 'Model belum ada.',
@@ -29,18 +40,28 @@ const CheckModelStatus = ({ onStatusChange }) => {
             json_exists: jsonExists,
             pickle_exists: false,
             pickle_valid: false
-          })
+          };
+        }
+      } else {
+        // Fallback: check local files
+        const jsonExists = await fetch('/model.json').then(r => r.ok).catch(() => false);
+        data = {
+          success: true,
+          status: jsonExists ? 'ready' : 'not_available',
+          message: jsonExists ? 'Model sudah di-fit dan siap digunakan.' : 'Model belum ada.',
+          data: null,
+          json_exists: jsonExists,
+          pickle_exists: false,
+          pickle_valid: false
         };
       }
       
-      const data = await response.ok ? await response.json() : {
-        success: false,
-        status: 'error',
-        message: 'Tidak dapat terhubung ke server'
-      };
-      
       setModelStatus(data);
-      setLastChecked(new Date());
+      const now = new Date();
+      setLastChecked(now);
+      // Save to localStorage
+      localStorage.setItem('modelStatusLastChecked', now.toISOString());
+      localStorage.setItem('modelStatus', JSON.stringify(data));
       
       // Notify parent component about status change
       if (onStatusChange) {
@@ -64,9 +85,33 @@ const CheckModelStatus = ({ onStatusChange }) => {
     }
   };
 
-  // Auto-check on mount
+  // Auto-check on mount, but only if no status exists
   useEffect(() => {
-    checkStatus();
+    // Load saved status from localStorage if exists
+    const savedStatus = localStorage.getItem('modelStatus');
+    const savedLastChecked = localStorage.getItem('modelStatusLastChecked');
+    
+    if (savedStatus && savedLastChecked) {
+      try {
+        const parsedStatus = JSON.parse(savedStatus);
+        setModelStatus(parsedStatus);
+        setShowCard(true);
+        setLastChecked(new Date(savedLastChecked));
+        
+        // Notify parent component
+        if (onStatusChange) {
+          onStatusChange(parsedStatus.status === 'ready', parsedStatus);
+        }
+      } catch (error) {
+        console.error('Error loading saved status:', error);
+        // If error, do fresh check
+        checkStatus();
+      }
+    } else {
+      // No saved status, do fresh check
+      checkStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getStatusColor = (status) => {

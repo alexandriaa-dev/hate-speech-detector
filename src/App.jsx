@@ -175,8 +175,10 @@ function App() {
             <ProbabilityBars proba={result.proba} />
           )}
           
-          {/* 5. Informasi Model dan Evaluasi Card - Always show */}
-          <ModelEvaluation />
+          {/* 5. Informasi Model dan Evaluasi Card - Only show when there's a result */}
+          {result && (
+            <ModelEvaluation />
+          )}
           
           <Footer />
         </div>
