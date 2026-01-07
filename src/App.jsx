@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import InputArea from './components/InputArea';
 import ButtonGroup from './components/ButtonGroup';
-import TrainModelButton from './components/TrainModelButton';
+import CheckModelStatus from './components/CheckModelStatus';
 import ResultDisplay from './components/ResultDisplay';
 import ProbabilityBars from './components/ProbabilityBars';
 import ModelEvaluation from './components/ModelEvaluation';
@@ -17,6 +17,7 @@ function App() {
   const [toast, setToast] = useState({ message: '', type: 'info', isVisible: false });
   const [modelLoaded, setModelLoaded] = useState(false);
   const [isCheckingModel, setIsCheckingModel] = useState(true);
+  const [modelStatus, setModelStatus] = useState(null);
   const resultRef = useRef(null);
   
   const showToast = (message, type = 'info') => {
@@ -34,7 +35,7 @@ function App() {
     }
 
     if (!modelLoaded) {
-      showToast('Model belum di-train! Silakan klik tombol "Train Model" terlebih dahulu.', 'warning');
+      showToast('Model belum tersedia atau belum siap digunakan. Silakan cek status model terlebih dahulu.', 'warning');
       return;
     }
 
@@ -83,100 +84,24 @@ function App() {
     setResult(null);
   };
 
-  const handleModelTrained = () => {
-    // Reload model info in ModelEvaluation
-    window.dispatchEvent(new Event('modelTrained'));
-    setModelLoaded(true); // Mark model as loaded after training
-    showToast('Model berhasil di-train! Halaman akan dimuat ulang...', 'success');
+  const handleModelStatusChange = (isReady, statusData) => {
+    setModelStatus(statusData);
+    setModelLoaded(isReady);
+    setIsCheckingModel(false);
+    
+    if (isReady) {
+      // Reload model info in ModelEvaluation
+      window.dispatchEvent(new Event('modelTrained'));
+    }
   };
 
-  // Check if model is available on mount
-  useEffect(() => {
-    const checkModel = async () => {
-      setIsCheckingModel(true);
-      try {
-        const API_URL = import.meta.env.VITE_API_URL || '';
-        let response;
-        
-        if (API_URL) {
-          // Check via API
-          response = await fetch(`${API_URL}/api/model-info`);
-          if (response.ok) {
-            const apiData = await response.json();
-            if (apiData.success && apiData.data) {
-              setModelLoaded(true);
-            } else {
-              setModelLoaded(false);
-            }
-          } else {
-            setModelLoaded(false);
-          }
-        } else {
-          // Check local file
-          response = await fetch('/model.json');
-          if (response.ok) {
-            setModelLoaded(true);
-          } else {
-            setModelLoaded(false);
-          }
-        }
-      } catch (error) {
-        console.error('Error checking model:', error);
-        setModelLoaded(false);
-      } finally {
-        setIsCheckingModel(false);
-      }
-    };
-    
-    checkModel();
-  }, []);
-
-  // Listen for toast events from TrainModelButton
+  // Listen for toast events
   useEffect(() => {
     const handleToastEvent = (e) => {
       showToast(e.detail.message, e.detail.type);
     };
     window.addEventListener('showToast', handleToastEvent);
     return () => window.removeEventListener('showToast', handleToastEvent);
-  }, []);
-
-  // Listen for model trained event to update modelLoaded state
-  useEffect(() => {
-    const handleModelTrained = () => {
-      // Mark model as loaded immediately
-      setModelLoaded(true);
-      
-      // Also re-check model after a delay to ensure it's saved
-      const checkModel = async () => {
-        try {
-          const API_URL = import.meta.env.VITE_API_URL || '';
-          let response;
-          
-          if (API_URL) {
-            response = await fetch(`${API_URL}/api/model-info`);
-            if (response.ok) {
-              const apiData = await response.json();
-              if (apiData.success && apiData.data) {
-                setModelLoaded(true);
-              }
-            }
-          } else {
-            response = await fetch('/model.json');
-            if (response.ok) {
-              setModelLoaded(true);
-            }
-          }
-        } catch (error) {
-          console.error('Error checking model after training:', error);
-        }
-      };
-      
-      // Wait a bit for model to be saved
-      setTimeout(checkModel, 1000);
-    };
-    
-    window.addEventListener('modelTrained', handleModelTrained);
-    return () => window.removeEventListener('modelTrained', handleModelTrained);
   }, []);
 
   return (
@@ -213,19 +138,12 @@ function App() {
             />
             
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
-                  <ButtonGroup 
-                    onAnalyze={handleAnalyze}
-                    onClear={handleClear}
-                    isLoading={isLoading}
-                    disabled={!modelLoaded || isCheckingModel}
-                  />
-                </div>
-                <div className="sm:w-auto">
-                  <TrainModelButton onTrainComplete={handleModelTrained} />
-                </div>
-              </div>
+              <ButtonGroup 
+                onAnalyze={handleAnalyze}
+                onClear={handleClear}
+                isLoading={isLoading}
+                disabled={!modelLoaded || isCheckingModel}
+              />
             </div>
             {!modelLoaded && !isCheckingModel && (
               <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
@@ -233,11 +151,19 @@ function App() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  <span>Model belum di-train. Silakan klik tombol "Train Model" terlebih dahulu sebelum menganalisis kalimat.</span>
+                  <span>Model belum tersedia atau belum siap digunakan. Silakan klik tombol "Cek Status Model" untuk melihat status model.</span>
                 </div>
               </div>
             )}
           </div>
+          
+          {/* Check Model Status Card - Separate from input area */}
+          <div className="card p-6 md:p-8 animate-fade-in">
+            <CheckModelStatus onStatusChange={handleModelStatusChange} />
+          </div>
+          
+          {/* Model Evaluation - Show evaluation metrics */}
+          <ModelEvaluation />
           
           {result && (
             <div ref={resultRef} className="space-y-6 animate-slide-up">
