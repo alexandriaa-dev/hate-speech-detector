@@ -112,16 +112,25 @@ def train_model_endpoint():
                 }), 500
                 
         except ImportError as import_err:
-            # If import fails, fallback to subprocess
+            # If import fails, fallback to subprocess using wrapper script
             try:
-                # Run the training script with subprocess
+                # Use wrapper script instead of train_model.py directly
+                wrapper_path = project_root / "model" / "run_training.py"
+                
+                if not wrapper_path.exists():
+                    return jsonify({
+                        'success': False,
+                        'error': f'Wrapper script not found at {wrapper_path}'
+                    }), 500
+                
+                # Run the wrapper script with subprocess
                 result = subprocess.run(
-                    [sys.executable, str(train_model_path)],
+                    [sys.executable, str(wrapper_path)],
                     cwd=str(project_root),
                     capture_output=True,
                     text=True,
                     timeout=900,  # 15 minutes
-                    env={**os.environ, 'PYTHONUNBUFFERED': '1'}  # Clean environment
+                    env={**os.environ, 'PYTHONUNBUFFERED': '1', 'PYTHONDONTWRITEBYTECODE': '1'}  # Clean environment
                 )
                 
                 if result.returncode == 0:
