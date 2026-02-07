@@ -105,7 +105,7 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden" style={{ overscrollBehavior: 'none', overscrollBehaviorY: 'none', overscrollBehaviorX: 'none' }}>
+    <div className="min-h-screen flex flex-col relative" style={{ overscrollBehavior: 'none', overscrollBehaviorY: 'none', overscrollBehaviorX: 'none' }}>
       {/* Enhanced soft gradient background */}
       <div className="fixed inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/60 via-purple-50/80 to-pink-50/40 -z-20"></div>
       
